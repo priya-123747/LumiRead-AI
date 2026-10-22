@@ -1,0 +1,973 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LumiRead — Paper Observatory</title>
+
+<!-- Free browser-based OCR engine -->
+
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+:root {
+  --paper: #f3e7ce;
+  --paper-light: #fff5df;
+  --ink: #263d30;
+  --ink-soft: #52624d;
+  --rust: #b64d36;
+  --ochre: #d6a653;
+  --line: #c9b895;
+  --shadow: rgba(65, 48, 29, .13);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(ellipse at 12% 12%, rgba(214,166,83,.20), transparent 35%),
+    radial-gradient(ellipse at 90% 75%, rgba(182,77,54,.09), transparent 30%),
+    repeating-linear-gradient(0deg, transparent 0 5px, rgba(70,50,30,.018) 6px);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--rust);
+  outline-offset: 3px;
+}
+
+.shell {
+  max-width: 1180px;
+  margin: auto;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 16px;
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 25px;
+  color: var(--rust);
+  box-shadow: inset 0 0 0 4px var(--paper), inset 0 0 0 5px var(--line);
+}
+
+.brand h1 {
+  font-size: 25px;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.eyebrow {
+  font: bold 10px/1.6 Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.status {
+  font: bold 11px Arial, sans-serif;
+  border: 1px solid var(--line);
+  padding: 9px 12px;
+  border-radius: 30px;
+}
+
+.intro {
+  padding: 34px 0 24px;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 20px;
+  align-items: end;
+}
+
+.intro h2 {
+  font-size: clamp(35px, 5vw, 57px);
+  line-height: 1.02;
+  margin: 10px 0;
+  font-weight: normal;
+  letter-spacing: -1.5px;
+}
+
+.intro h2 em { color: var(--rust); }
+
+.intro p {
+  max-width: 530px;
+  line-height: 1.65;
+  margin-bottom: 0;
+}
+
+.specimen {
+  border-left: 3px solid var(--rust);
+  padding: 8px 0 8px 16px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: 20px;
+}
+
+.panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: rgba(255,245,223,.62);
+  box-shadow: 4px 5px 0 var(--shadow);
+  padding: 20px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.panel-head h3 {
+  font-size: 20px;
+  font-weight: normal;
+  margin: 4px 0 0;
+}
+
+.number {
+  color: var(--rust);
+  font: bold 12px Arial, sans-serif;
+}
+
+.scan-stage {
+  min-height: 270px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  border: 1px dashed #a99a7c;
+  background:
+    radial-gradient(circle, rgba(214,166,83,.15), transparent 65%),
+    #eee0c2;
+  padding: 18px;
+  text-align: center;
+}
+
+.scan-stage::before, .scan-stage::after {
+  content: "";
+  position: absolute;
+  width: 35px;
+  height: 35px;
+  border-color: var(--rust);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.scan-stage::before {
+  top: 9px; left: 9px;
+  border-width: 2px 0 0 2px;
+}
+
+.scan-stage::after {
+  right: 9px; bottom: 9px;
+  border-width: 0 2px 2px 0;
+}
+
+#preview {
+  display: none;
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+.target {
+  width: 92px;
+  height: 92px;
+  border: 1px solid var(--rust);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-bottom: 15px;
+  font-size: 39px;
+  color: var(--rust);
+  box-shadow: 0 0 0 9px rgba(182,77,54,.08),
+              0 0 0 19px rgba(182,77,54,.04);
+}
+
+#emptyState p { margin: 8px 0; }
+.muted { color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 15px;
+}
+
+.btn {
+  border: 1px solid var(--ink);
+  padding: 11px 14px;
+  background: transparent;
+  color: var(--ink);
+  font: bold 12px Arial, sans-serif;
+  letter-spacing: .3px;
+}
+
+.btn.primary {
+  background: var(--ink);
+  color: var(--paper-light);
+}
+
+.btn.accent {
+  background: var(--rust);
+  color: #fff6e5;
+  border-color: var(--rust);
+}
+
+.btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+.progress-wrap { margin-top: 15px; display: none; }
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font: 12px Arial, sans-serif;
+  margin-bottom: 7px;
+}
+
+progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--rust);
+}
+
+#message {
+  font: 12px/1.5 Arial, sans-serif;
+  color: var(--ink-soft);
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+
+.reading-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 15px 0 10px;
+}
+
+.size-tools { display: flex; align-items: center; gap: 7px; }
+
+.size-tools button {
+  width: 35px;
+  height: 35px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: bold;
+}
+
+#fontLabel {
+  min-width: 42px;
+  text-align: center;
+  font: 12px Arial, sans-serif;
+}
+
+#output {
+  width: 100%;
+  min-height: 255px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--ochre);
+  background: #fff8e9;
+  color: #1e3025;
+  padding: 17px;
+  font-size: 22px;
+  line-height: 1.65;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+#output::placeholder { color: #82765f; }
+
+.notice {
+  background: #f0dfbb;
+  border-left: 3px solid var(--rust);
+  padding: 11px 13px;
+  font: 12px/1.6 Arial, sans-serif;
+  margin-top: 14px;
+}
+
+.history {
+  margin-top: 24px;
+  border-top: 2px solid var(--ink);
+  padding-top: 15px;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.history h3 { font-size: 21px; font-weight: normal; margin: 0; }
+
+.history-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.history-item {
+  text-align: left;
+  padding: 13px;
+  border: 1px solid var(--line);
+  background: rgba(255,245,223,.6);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.history-item strong {
+  display: block;
+  font-size: 15px;
+  font-weight: normal;
+  margin-bottom: 7px;
+}
+
+.history-item span {
+  display: block;
+  font: 11px/1.5 Arial, sans-serif;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+footer {
+  margin-top: 25px;
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  font: 11px/1.6 Arial, sans-serif;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 760px) {
+  .shell { padding: 15px; }
+  .intro { grid-template-columns: 1fr; padding-top: 25px; }
+  .layout { grid-template-columns: 1fr; }
+  .history-list { grid-template-columns: 1fr; }
+  .status { font-size: 10px; }
+  .brand h1 { font-size: 21px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
+</style>
+</head>
+
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">◉</div>
+      <div>
+        <div class="eyebrow">An accessible reading instrument</div>
+        <h1>LumiRead <span style="color:var(--rust)">AI</span></h1>
+      </div>
+    </div>
+    <div class="status">● PAPER OBSERVATORY / 01</div>
+  </header>
+
+  <section class="intro">
+    <div>
+      <div class="eyebrow">APP-19 · READ WITHOUT STRAIN</div>
+      <h2>Small print.<br><em>Opened up.</em></h2>
+      <p>
+        Turn tiny printed words into a clearer reading experience.
+        Bring a label, medicine strip, or bill into focus and let
+        LumiRead help you read it.
+      </p>
+    </div>
+    <div class="specimen">
+      <div class="eyebrow">Field note No. 001</div>
+      Designed for low-vision reading.<br>
+      Image → extracted text → enlarged words → spoken reading.
+    </div>
+  </section>
+
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Optical station</div>
+          <h3>Bring it into focus</h3>
+        </div>
+        <span class="number">01 / IMAGE</span>
+      </div>
+
+      <div class="scan-stage" id="scanStage">
+        <div id="emptyState">
+          <div class="target" aria-hidden="true">⌕</div>
+          <p><strong>Place your printed words here</strong></p>
+          <p class="muted">Choose an image or capture one with your camera.</p>
+        </div>
+        <img id="preview" alt="Preview of the selected document">
+      </div>
+
+      <div class="actions">
+        <label class="btn primary" for="fileInput">Choose image</label>
+        <input id="fileInput" type="file" accept="image/*" hidden>
+        <label class="btn" for="cameraInput">Use camera</label>
+        <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
+        <button class="btn accent" id="scanBtn" disabled>Extract text ↗</button>
+      </div>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-label">
+          <span id="progressText">Preparing reading lens…</span>
+          <span id="progressNumber">0%</span>
+        </div>
+        <progress id="progress" value="0" max="100"></progress>
+      </div>
+      <div id="message" role="status" aria-live="polite">
+        Ready when you are. Clear, well-lit images usually work best.
+      </div>
+
+      <div class="notice">
+        <strong>Field tip:</strong> Keep the camera steady, fill the frame
+        with the print, and avoid glare. OCR accuracy depends on image quality.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Reading lens</div>
+          <h3>Your enlarged text</h3>
+          
+<div style="margin: 12px 0;">
+  <label for="languageSelect">Reading language / வாசிப்பு மொழி:</label>
+  <select id="languageSelect" style="padding: 10px; margin-left: 8px;">
+    <option value="en-IN">English</option>
+    <option value="ta-IN">தமிழ் (Tamil)</option>
+  </select>
+</div>
+
+          
+<div class="actions" style="margin-bottom:14px">
+  <button class="btn accent" id="medicineBtn" type="button">
+    Medicine reading mode
+  </button>
+</div>
+<div id="medicineResult" class="notice" hidden aria-live="polite"></div>
+<div class="actions">
+  <button class="btn" id="speakMedicineBtn" type="button">
+    Read medicine details aloud
+  </button>
+</div>
+
+        </div>
+        <span class="number">02 / WORDS</span>
+      </div>
+
+      <div class="reading-toolbar">
+        <span class="eyebrow">Adjust the type</span>
+        <div class="size-tools">
+          <button id="smaller" type="button" aria-label="Decrease text size">A−</button>
+          <span id="fontLabel">22 px</span>
+          <button id="larger" type="button" aria-label="Increase text size">A+</button>
+        </div>
+      </div>
+
+      <textarea id="output" aria-label="Editable extracted text"
+        placeholder="Your extracted words will appear here. You can also type or correct the text yourself."></textarea>
+
+      <div class="actions">
+        <button class="btn primary" id="speakBtn">▶ Read aloud</button>
+        <button class="btn" id="stopBtn">■ Stop voice</button>
+        <button class="btn" id="copyBtn">Copy text</button>
+        <button class="btn" id="downloadBtn">Save .txt</button>
+        <button class="btn accent" id="saveBtn">Keep in history +</button>
+      </div>
+
+      <div class="notice">
+        <strong>Please verify important details.</strong> OCR can misread
+        medicine names, strengths, dosage instructions, batch numbers, and
+        expiry dates. Never rely on extracted medicine information without
+        checking the original packaging or asking a pharmacist.
+      </div>
+    </section>
+  </main>
+
+  <section class="history">
+    <div class="history-head">
+      <div>
+        <div class="eyebrow">Your desk archive</div>
+        <h3>Recent readings</h3>
+      </div>
+      <button class="btn" id="clearHistoryBtn">Clear history</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <p class="muted">Your saved readings will appear here during this browser session.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>LUMIREAD AI · THE PAPER OBSERVATORY</span>
+    <span>Prototype 01 · OCR powered by Tesseract.js</span>
+    <span>Text recognition is not medical advice.</span>
+  </footer>
+</div>
+
+<script>
+const fileInput = document.getElementById("fileInput");
+const cameraInput = document.getElementById("cameraInput");
+const preview = document.getElementById("preview");
+const emptyState = document.getElementById("emptyState");
+const scanBtn = document.getElementById("scanBtn");
+const output = document.getElementById("output");
+const message = document.getElementById("message");
+const progressWrap = document.getElementById("progressWrap");
+const progress = document.getElementById("progress");
+const progressText = document.getElementById("progressText");
+const progressNumber = document.getElementById("progressNumber");
+const historyList = document.getElementById("historyList");
+
+let selectedFile = null;
+let fontSize = 22;
+let history = [];
+let isRecognizing = false;
+
+function setMessage(text) {
+  message.textContent = text;
+}
+
+function loadImage(file) {
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    setMessage("Please choose an image file.");
+    return;
+  }
+
+  if (file.size > 15 * 1024 * 1024) {
+    setMessage("This image is larger than 15 MB. Please choose a smaller image.");
+    return;
+  }
+
+  selectedFile = file;
+  const objectUrl = URL.createObjectURL(file);
+
+  preview.onload = () => URL.revokeObjectURL(objectUrl);
+  preview.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    setMessage("This image could not be displayed. Please try another file.");
+  };
+  preview.src = objectUrl;
+  preview.style.display = "block";
+  emptyState.style.display = "none";
+  scanBtn.disabled = false;
+
+  setMessage("Image ready. Select “Extract text” to begin recognition.");
+}
+
+fileInput.addEventListener("change", event => loadImage(event.target.files[0]));
+cameraInput.addEventListener("change", event => loadImage(event.target.files[0]));
+
+scanBtn.addEventListener("click", async () => {
+  if (!selectedFile || isRecognizing) return;
+
+  if (!window.Tesseract) {
+    setMessage("The OCR engine did not load. Check your internet connection and refresh.");
+    return;
+  }
+
+  isRecognizing = true;
+  scanBtn.disabled = true;
+  progressWrap.style.display = "block";
+  progress.value = 0;
+  progressNumber.textContent = "0%";
+  progressText.textContent = "Preparing reading lens…";
+  setMessage("Recognizing the printed words. Please wait.");
+
+  try {
+    const language = document.getElementById("languageSelect").value;
+const ocrLanguage = language === "ta-IN" ? "tam" : "eng";
+
+const result = await Tesseract.recognize(selectedFile, ocrLanguage, {
+      logger: info => {
+        if (typeof info.progress === "number") {
+          const pct = Math.round(info.progress * 100);
+          progress.value = pct;
+          progressNumber.textContent = pct + "%";
+          progressText.textContent = ({
+            "loading tesseract core": "Loading recognition engine…",
+            "initializing tesseract": "Initializing…",
+            "loading language traineddata": "Loading English language data…",
+            "initializing api": "Preparing the reading lens…",
+            "recognizing text": "Reading the print…"
+          })[info.status] || "Working…";
+        }
+      }
+    });
+
+    const extracted = result.data.text.trim();
+    output.value = extracted;
+    setMessage(extracted
+      ? "Recognition finished. Review the text and correct any mistakes."
+      : "No readable text found. Try a sharper, brighter image.");
+    if (extracted) {
+      progress.value = 100;
+      progressNumber.textContent = "100%";
+      progressText.textContent = "Recognition complete";
+    }
+  } catch (error) {
+    console.error(error);
+    setMessage("OCR could not finish. Check your internet connection and try a clearer image.");
+  } finally {
+    isRecognizing = false;
+    scanBtn.disabled = !selectedFile;
+  }
+});
+
+function updateFontSize() {
+  output.style.fontSize = fontSize + "px";
+  document.getElementById("fontLabel").textContent = fontSize + " px";
+}
+
+document.getElementById("smaller").addEventListener("click", () => {
+  fontSize = Math.max(16, fontSize - 2);
+  updateFontSize();
+});
+
+document.getElementById("larger").addEventListener("click", () => {
+  fontSize = Math.min(42, fontSize + 2);
+  updateFontSize();
+});
+
+
+document.getElementById("speakBtn").addEventListener("click", () => {
+  const text = output.value.trim();
+  const language = document.getElementById("languageSelect").value;
+
+  if (!text) {
+    setMessage("Extract or type some text before using read aloud.");
+    return;
+  }
+
+  if (!("speechSynthesis" in window)) {
+    setMessage("Speech output is not supported by this browser.");
+    return;
+  }
+
+  speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = language;
+  utterance.rate = 0.85;
+
+  const voices = speechSynthesis.getVoices();
+  const prefix = language === "ta-IN" ? "ta" : "en";
+  const voice = voices.find(v =>
+    v.lang.toLowerCase().startsWith(prefix)
+  );
+
+  if (voice) {
+    utterance.voice = voice;
+  }
+
+  utterance.onstart = () => setMessage("Reading your text aloud…");
+  utterance.onend = () => setMessage("Finished reading.");
+  utterance.onerror = () => setMessage(
+    "Speech failed. Check whether your device supports the selected language."
+  );
+
+  speechSynthesis.speak(utterance);
+});
+
+document.getElementById("stopBtn").addEventListener("click", () => {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  setMessage("Speech stopped.");
+});
+
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const text = output.value;
+  if (!text.trim()) {
+    setMessage("There is no text to copy yet.");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setMessage("Text copied to clipboard.");
+  } catch {
+    output.focus();
+    output.select();
+    const copied = document.execCommand("copy");
+    setMessage(copied
+      ? "Text copied to clipboard."
+      : "Copy was blocked. Select the text and copy it manually.");
+  }
+});
+
+document.getElementById("downloadBtn").addEventListener("click", () => {
+  const text = output.value;
+  if (!text.trim()) {
+    setMessage("There is no text to save yet.");
+    return;
+  }
+
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "lumiread-extracted-text.txt";
+  link.click();
+  URL.revokeObjectURL(url);
+  setMessage("Your text file has been prepared.");
+});
+
+function renderHistory() {
+  historyList.replaceChildren();
+
+  if (history.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No saved readings in this session yet.";
+    historyList.appendChild(empty);
+    return;
+  }
+
+  history.forEach((item, index) => {
+    const button = document.createElement("button");
+    button.className = "history-item";
+    button.type = "button";
+
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+
+    const snippet = document.createElement("span");
+    snippet.textContent = item.text.slice(0, 115) || "(Empty reading)";
+
+    const time = document.createElement("span");
+    time.textContent = item.time;
+
+    button.append(title, snippet, time);
+    button.addEventListener("click", () => {
+      output.value = item.text;
+      setMessage("Loaded saved reading " + (index + 1) + ".");
+      output.focus();
+    });
+    historyList.appendChild(button);
+  });
+}
+
+document.getElementById("saveBtn").addEventListener("click", () => {
+  const text = output.value.trim();
+  if (!text) {
+    setMessage("Extract or type some text before saving it.");
+    return;
+  }
+
+  history.unshift({
+    title: "Reading " + (history.length + 1),
+    text,
+    time: new Date().toLocaleString()
+  });
+
+  history = history.slice(0, 12);
+  renderHistory();
+  setMessage("Reading saved in this page's session history.");
+});
+
+document.getElementById("clearHistoryBtn").addEventListener("click", () => {
+  history = [];
+  renderHistory();
+  setMessage("Session history cleared.");
+});
+
+window.addEventListener("beforeunload", () => {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+});
+
+
+
+document.getElementById("medicineBtn").addEventListener("click", () => {
+  const text = output.value.trim();
+  const result = document.getElementById("medicineResult");
+  const tamil = document.getElementById("languageSelect").value === "ta-IN";
+
+  result.hidden = false;
+  result.style.whiteSpace = "pre-line";
+
+  if (!text) {
+    result.textContent = tamil
+      ? "முதலில் மருந்து லேபிளிலிருந்து உரையைப் பிரித்தெடுக்கவும்."
+      : "Please extract text from a medicine label first.";
+    return;
+  }
+
+  const lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
+
+  function findLine(patterns) {
+    return lines.find(line =>
+      patterns.some(pattern => pattern.test(line))
+    ) || (tamil
+      ? "கண்டறியப்படவில்லை — அசல் மருந்து பொட்டலத்தைச் சரிபார்க்கவும்"
+      : "Not found — check the original packaging");
+  }
+
+  const medicineLines = lines.filter(line =>
+    /\b(tablet|capsule|syrup|paracetamol|ibuprofen|cetirizine|amoxicillin)\b/i.test(line)
+  );
+
+  const strengthLines = lines.filter(line =>
+    /\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|ml|mL|IU)\b/i.test(line)
+  );
+
+  const expiryLine = findLine([
+    /\bEXP\b/i,
+    /\bEXPIRY\b/i,
+    /\bEXPIRES?\b/i,
+    /\bUSE BEFORE\b/i
+  ]);
+
+  const batchLine = findLine([
+    /\bBATCH\b/i,
+    /\bB\.?\s*NO\b/i,
+    /\bLOT\b/i
+  ]);
+
+  const manufacturerLine = findLine([
+    /\bMFG\b/i,
+    /\bMANUFACTURED BY\b/i,
+    /\bMARKETED BY\b/i
+  ]);
+
+  const labels = tamil
+    ? [
+        "மருந்து லேபிள் — சரிபார்ப்பு அவசியம்",
+        "",
+        "சாத்தியமான மருந்துப் பெயர்:",
+        medicineLines[0] || "உறுதியாகக் கண்டறிய முடியவில்லை",
+        "",
+        "சாத்தியமான மருந்தின் அளவு:",
+        strengthLines.join(" | ") || "உறுதியாகக் கண்டறிய முடியவில்லை",
+        "",
+        "காலாவதி விவரம்:",
+        expiryLine,
+        "",
+        "தொகுதி எண் (Batch):",
+        batchLine,
+        "",
+        "உற்பத்தியாளர் விவரம்:",
+        manufacturerLine,
+        "",
+        "படத்திலிருந்து பிரித்தெடுக்கப்பட்ட அசல் உரை:",
+        text,
+        "",
+        "முக்கியம்: இவை உரை அடிப்படையிலான பொருத்தங்கள் மட்டுமே; மருத்துவத் தகவல்கள் சரிபார்க்கப்படவில்லை. அசல் பொட்டலத்தைச் சரிபார்க்கவும் அல்லது மருந்தாளரிடம் கேட்கவும்."
+      ]
+    : [
+        "MEDICINE LABEL — REVIEW REQUIRED",
+        "",
+        "Possible medicine name:",
+        medicineLines[0] || "Not confidently identified",
+        "",
+        "Possible strength:",
+        strengthLines.join(" | ") || "Not confidently identified",
+        "",
+        "Possible expiry information:",
+        expiryLine,
+        "",
+        "Possible batch information:",
+        batchLine,
+        "",
+        "Possible manufacturer:",
+        manufacturerLine,
+        "",
+        "Original extracted text:",
+        text,
+        "",
+        "IMPORTANT: These are text matches, not verified medical information. Check the original packaging or ask a pharmacist."
+      ];
+
+  result.textContent = labels.join("\n");
+});
+
+document.getElementById("speakMedicineBtn").addEventListener("click", () => {
+  const result = document.getElementById("medicineResult");
+  const language = document.getElementById("languageSelect").value;
+
+  if (result.hidden || !result.textContent.trim()) {
+    setMessage("Open Medicine Reading Mode first.");
+    return;
+  }
+
+  if (!("speechSynthesis" in window)) {
+    setMessage("Speech output is not supported by this browser.");
+    return;
+  }
+
+  speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(result.textContent);
+  utterance.lang = language;
+  utterance.rate = 0.85;
+
+  const prefix = language === "ta-IN" ? "ta" : "en";
+  const voice = speechSynthesis.getVoices().find(v =>
+    v.lang.toLowerCase().startsWith(prefix)
+  );
+
+  if (voice) utterance.voice = voice;
+
+  utterance.onstart = () => setMessage("Reading medicine details aloud…");
+  utterance.onend = () => setMessage("Finished reading medicine details.");
+  utterance.onerror = () => setMessage(
+    "Speech failed. Check whether the selected language has a supported voice."
+  );
+
+  speechSynthesis.speak(utterance);
+});
+
+
+</script>
+</body>
+</html>
